@@ -8,21 +8,84 @@
 
 import UIKit
 import FirebaseAuth
+import FirebaseFirestore
+import Toast_Swift
 
 class ChatViewController: UIViewController {
 
     @IBOutlet weak var tableView: UITableView!
     @IBOutlet weak var messageTextfield: UITextField!
     
+    let db = Firestore.firestore()
+    
+    var message : [Message] = []
+ 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = "FlashChat"
+        
+//        tableView.delegate = self
+        tableView.dataSource = self
+        title = K.appName
         navigationItem.hidesBackButton = true
+        
+        tableView.register(UINib(nibName: K.cellNibName, bundle: nil), forCellReuseIdentifier: K.cellIdentifier)
+//        tableView.register(UINib(nibName: K.cellNibName, bundle: nil), forHeaderFooterViewReuseIdentifier: K.cellIdentifier)
+        
+        loadMessage()
 
     }
     
-    @IBAction func sendPressed(_ sender: UIButton) {
+    func loadMessage(){
         
+        db.collection(K.FStore.collectionName)
+            .order(by: K.FStore.dateField)
+            .addSnapshotListener {
+            querySnapshot, error in
+            
+            self.message = []
+            
+            if let e = error{
+                self.view.makeToast("\(e)")
+            }else {
+                print("success")
+                if let snapshot = querySnapshot?.documents{
+                    for doc in snapshot {
+                        let data = doc.data()
+                        if let sender = data[K.FStore.senderField] as? String , let body = data[K.FStore.bodyField] as? String {
+                            let newMessage = Message(sender: sender, body: body)
+                            self.message.append(newMessage)
+                            
+                            DispatchQueue.main.async {
+                                self.tableView.reloadData()
+                                let indexPath = IndexPath(row: self.message.count-1, section: 0)
+                                self.tableView.scrollToRow(at: indexPath, at: .top, animated: true)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    @IBAction func sendPressed(_ sender: UIButton) {
+        if let messageBody = messageTextfield.text, let messageSender = Auth.auth().currentUser?.email {
+            
+            db.collection(K.FStore.collectionName).addDocument(data:[
+                K.FStore.senderField : messageSender,
+                K.FStore.bodyField: messageBody,
+                K.FStore.dateField: Date().timeIntervalSince1970
+            ]) { error in
+                if let e = error {
+                    self.view.makeToast("\(e)")
+                }else {
+                    DispatchQueue.main.async {
+                        self.messageTextfield.text = ""
+                    }
+                    print("success")
+                }
+            }
+            
+        }
     }
     
     
@@ -35,6 +98,40 @@ class ChatViewController: UIViewController {
             print("Error signing out", signOutError)
         }
     }
-    
-
 }
+
+extension ChatViewController : UITableViewDataSource {
+    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        return message.count
+    }
+    
+    func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let msg = message[indexPath.row]
+        
+        let cell = tableView.dequeueReusableCell(withIdentifier: K.cellIdentifier, for: indexPath) as! MessageViewCell
+        cell.label.text = msg.body
+        
+        if msg.sender == Auth.auth().currentUser?.email {
+            cell.leftImageView.isHidden = true
+            cell.rightImageView.isHidden = false
+            cell.messageBubble.backgroundColor = UIColor(named: K.BrandColors.blue)
+            cell.label.textColor = UIColor.white
+        }
+        
+        else {
+            cell.leftImageView.isHidden = false
+            cell.rightImageView.isHidden = true
+            cell.messageBubble.backgroundColor = UIColor(named: K.BrandColors.lighBlue)
+            cell.label.textColor = UIColor.blue
+        }
+        
+        return cell
+    }
+    
+}
+
+//extension ChatViewController : UITableViewDelegate {
+//    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+//        print(indexPath.row)
+//    }
+//}

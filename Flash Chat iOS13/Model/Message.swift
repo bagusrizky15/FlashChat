@@ -8,12 +8,8 @@
 
 import Foundation
 
-struct UserModel {
-    let uid: String
-    let email: String
+struct Message {
+    let sender: String
+    let body: String
     
-    init(uid: String, email: String) {
-        self.uid = uid
-        self.email = email
-    }
 }
